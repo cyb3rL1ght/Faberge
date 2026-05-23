@@ -1,28 +1,33 @@
 NGINX_CONF="/etc/nginx/sites-available/caffe.conf"
 KIOSK_USER="${SUDO_USER:-$USER}"
 KIOSK_HOME=$(eval echo ~$KIOSK_USER)
-SCREEN_W=1920
-SCREEN_H=1080
-HALF_W=$((SCREEN_W / 2))
+SCREEN_0_W=1280
+SCREEN_0_H=1024
+SCREEN_1_W=1920
+SCREEN_1_H=1080
 
 
-sudo apt update && sudo apt upgrade -y && apt install -y nginx xorg openbox unclutter wmctrl curl net-tools network-manager nano iputils-ping dnsutils 
+sudo apt update && sudo apt upgrade -y && apt install -y nginx xorg openbox \
+ unclutter wmctrl curl net-tools network-manager nano iputils-ping dnsutils git
 
 snap install chromium
 
 systemctl enable nginx && systemctl restart nginx
 
-mkdir -p /var/www/caffe <тут будут страницы и один общий класс стилизаций и js>
+mkdir -p /var/www/faberge <тут будут страницы из этого репозитория>
 
 
 if [ ! -f "$NGINX_CONF" ]; then
         cat > "$NGINX_CONF" << 'NGINX'
 server {
     listen 80;
-    server_name localhost;
-    
-    location /caffe {
-        alias /var/www/caffe;
+    server_name _;
+
+    # Делаем /var/www/caffe основным корнем сайта
+    root /var/www/faberge;
+    #index index.html;
+
+    location / {
         try_files $uri $uri/ =404;
     }
 }
@@ -34,7 +39,7 @@ nginx -t && systemctl restart nginx
 
 
 # "Настройка Xwrapper.config..."
-echo "allowed_users=everybody" | tee /etc/X11/Xwrapper.config > /dev/null
+echo "allowed_users=anybody" | tee /etc/X11/Xwrapper.config > /dev/null
 
 # 2. Автологин в консоль TTY1
     log_info "Настройка автологина для $KIOSK_USER..."
@@ -48,7 +53,7 @@ EOF
 systemctl daemon-reload && systemctl enable getty@tty1.service
 
 
-    if ! grep -q "exec startx" "$KIOSK_HOME/.profile" 2>/dev/null; then # .profile
+    if ! grep -q "exec startx" "$KIOSK_HOME/.profile" 2>/dev/null; then       # .profile
         cat << 'EOF' >> "$KIOSK_HOME/.profile"
 
 # Автозапуск графической сессии киоска на TTY1
@@ -59,7 +64,7 @@ EOF
 
 
 
-# .xinitrc"
+max@caffe:~$ max@caffe:~$ cat .xinitrc
 #!/bin/bash
 # Базовые настройки дисплея
 xset s off -dpms
@@ -70,52 +75,41 @@ which unclutter && unclutter -idle 0.1 -root &
 
 # Openbox
 openbox-session &
-sleep 3
+sleep 2
 
 # === ЛЕВОЕ окно ===
 chromium \
-  --app=http://localhost/index.html \
+  --kiosk \
+  --app=http://localhost/menu-left.html \
   --user-data-dir=$HOME/.config/chromium_1 \
   --no-first-run --noerrdialogs --disable-infobars \
-  --disable-session-crashed-bubble \
+  --disable-session-crashed-bubble --disable-translate --disable-pinch \
+  --overscroll-history-navigation=0 \
+  --incognito --disable-cache --disk-cache-dir=/dev/null --disk-cache-size=1 \
   --autoplay-policy=no-user-gesture-required &
 
-#sleep 6
+sleep 1
 
 # === ПРАВОЕ окно ===
-#chromium \
-#  --app=http://localhost/caffe/menu_2.html \
-#  --user-data-dir=$HOME/.config/chromium_2 \
-#  --no-first-run --noerrdialogs --disable-infobars \
-#  --disable-session-crashed-bubble \
-#  --autoplay-policy=no-user-gesture-required &
+chromium \
+  --kiosk \
+  --app=http://localhost/menu-right.html \
+  --user-data-dir=$HOME/.config/chromium_2 \
+  --no-first-run --noerrdialogs --disable-infobars \
+  --disable-session-crashed-bubble --disable-translate --disable-pinch \
+  --overscroll-history-navigation=0 \
+  --incognito --disable-cache --disk-cache-dir=/dev/null --disk-cache-size=1 \
+  --autoplay-policy=no-user-gesture-required &
 
-sleep 2
+sleep 6
 
 # Позиционируем окна через wmctrl (по заголовку <title> страницы)
 # Точные английские заголовки из HTML: "Menu Left" и "Menu Right"
-# wmctrl -r "Menu Left" -e 0,0,0,${HALF_W},${SCREEN_H} 2>/dev/null || true
-# wmctrl -r "Menu Right" -e 0,${HALF_W},0,${HALF_W},${SCREEN_H} 2>/dev/null || true
-wmctrl -r "Menu_Left" -e 0,0,0,1920,1080 2>/dev/null || true
+wmctrl -r "Menu_Left" -e 0,0,0,SCREEN_0_W,SCREEN_0_H 2>/dev/null || true
+wmctrl -r "Menu_Right" -e 0,SCREEN_0_W,0,SCREEN_1_W,SCREEN_1_H 2>/dev/null || true
 
 wait
 
-
-
-nano .config/openbox/rc.xml
-
-<applications>
-…
-
-  <application class="chromium-browser" name="chromium-browser">
-    <decor>no</decor>
-    <shade>no</shade>
-    <focus>yes</focus>
-    <layer>normal</layer>
-    <maximized>no</maximized>
-  </application>
-
-</applications>
 
 
 
