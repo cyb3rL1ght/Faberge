@@ -1,0 +1,134 @@
+NGINX_CONF="/etc/nginx/sites-available/caffe.conf"
+KIOSK_USER="${SUDO_USER:-$USER}"
+KIOSK_HOME=$(eval echo ~$KIOSK_USER)
+SCREEN_W=1920
+SCREEN_H=1080
+HALF_W=$((SCREEN_W / 2))
+
+
+sudo apt update && sudo apt upgrade -y && apt install -y nginx xorg openbox unclutter wmctrl curl net-tools network-manager nano iputils-ping dnsutils 
+
+snap install chromium
+
+systemctl enable nginx && systemctl restart nginx
+
+mkdir -p /var/www/caffe <тут будут страницы и один общий класс стилизаций и js>
+
+
+if [ ! -f "$NGINX_CONF" ]; then
+        cat > "$NGINX_CONF" << 'NGINX'
+server {
+    listen 80;
+    server_name localhost;
+    
+    location /caffe {
+        alias /var/www/caffe;
+        try_files $uri $uri/ =404;
+    }
+}
+NGINX
+
+ln -sf /etc/nginx/sites-available/caffe.conf /etc/nginx/sites-enabled/ 2>/dev/null || true
+rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+nginx -t && systemctl restart nginx
+
+
+# "Настройка Xwrapper.config..."
+echo "allowed_users=everybody" | tee /etc/X11/Xwrapper.config > /dev/null
+
+# 2. Автологин в консоль TTY1
+    log_info "Настройка автологина для $KIOSK_USER..."
+    mkdir -p /etc/systemd/system/getty@tty1.service.d
+    cat << EOF > /etc/systemd/system/getty@tty1.service.d/autologin.conf
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin $KIOSK_USER --noclear %I \$TERM
+EOF
+
+systemctl daemon-reload && systemctl enable getty@tty1.service
+
+
+    if ! grep -q "exec startx" "$KIOSK_HOME/.profile" 2>/dev/null; then # .profile
+        cat << 'EOF' >> "$KIOSK_HOME/.profile"
+
+# Автозапуск графической сессии киоска на TTY1
+if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
+  exec startx
+fi
+EOF
+
+
+
+# .xinitrc"
+#!/bin/bash
+# Базовые настройки дисплея
+xset s off -dpms
+xset s noblank
+
+# Прячем курсор (если unclutter не установлен — просто пропустит)
+which unclutter && unclutter -idle 0.1 -root &
+
+# Openbox
+openbox-session &
+sleep 3
+
+# === ЛЕВОЕ окно ===
+chromium \
+  --app=http://localhost/index.html \
+  --user-data-dir=$HOME/.config/chromium_1 \
+  --no-first-run --noerrdialogs --disable-infobars \
+  --disable-session-crashed-bubble \
+  --autoplay-policy=no-user-gesture-required &
+
+#sleep 6
+
+# === ПРАВОЕ окно ===
+#chromium \
+#  --app=http://localhost/caffe/menu_2.html \
+#  --user-data-dir=$HOME/.config/chromium_2 \
+#  --no-first-run --noerrdialogs --disable-infobars \
+#  --disable-session-crashed-bubble \
+#  --autoplay-policy=no-user-gesture-required &
+
+sleep 2
+
+# Позиционируем окна через wmctrl (по заголовку <title> страницы)
+# Точные английские заголовки из HTML: "Menu Left" и "Menu Right"
+# wmctrl -r "Menu Left" -e 0,0,0,${HALF_W},${SCREEN_H} 2>/dev/null || true
+# wmctrl -r "Menu Right" -e 0,${HALF_W},0,${HALF_W},${SCREEN_H} 2>/dev/null || true
+wmctrl -r "Menu_Left" -e 0,0,0,1920,1080 2>/dev/null || true
+
+wait
+
+
+
+nano .config/openbox/rc.xml
+
+<applications>
+…
+
+  <application class="chromium-browser" name="chromium-browser">
+    <decor>no</decor>
+    <shade>no</shade>
+    <focus>yes</focus>
+    <layer>normal</layer>
+    <maximized>no</maximized>
+  </application>
+
+</applications>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

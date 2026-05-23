@@ -1,0 +1,77 @@
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="google" content="notranslate">
+<meta http-equiv="refresh" content="300">
+<title>Menu_Right</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="kiosk">
+  <div class="monitor">
+    <header class="header">
+      <h1>СТОЛОВАЯ «ФАБЕРЖЕ»</h1>
+      <div class="meta">
+        <div>Пн–Пт: 09:00–18:00 | Сб: 10:00–16:00</div>
+        <div class="time" id="clock">17:17</div>
+      </div>
+    </header>
+
+    <div class="promo-strip" id="sets-container">
+    </div>
+
+    <div class="menu-grid">
+      <div class="column">
+        <div class="col-title">🍲 Первое блюдо</div>
+        <div class="item-list" id="soups-list"></div>
+      </div>
+      <div class="column">
+        <div class="col-title">🌾 Гарниры</div>
+        <div class="item-list" id="sides-list"></div>
+      </div>
+      <div class="column">
+        <div class="col-title">☕ Напитки</div>
+        <div class="item-list" id="drinks-list"></div>
+        <div class="footer-note">Приятного аппетита! 💛</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="scripts.js"></script>
+<script>
+  updateClock();
+  setInterval(updateClock, 59000);
+
+  // Установка графика работы из CSS-переменной
+  function setWorkingHours() {
+    const workingHoursElement = document.querySelector('.meta div:first-child');
+    if (workingHoursElement) {
+      const style = getComputedStyle(document.documentElement);
+      const workingHoursText = style.getPropertyValue('--working-hours-text').replace(/"/g, '').trim();
+      if (workingHoursText) {
+        workingHoursElement.textContent = workingHoursText;
+      }
+    }
+  }
+  
+  setWorkingHours();
+
+  async function initMenuRight(){
+    const menuData = await loadMenuFromCSV('menu.csv');
+    
+    if(menuData){
+      document.getElementById('soups-list').innerHTML = menuData.soups.map(renderMenuItem).join('');
+      document.getElementById('sides-list').innerHTML = menuData.sides.map(renderMenuItem).join('');
+      document.getElementById('drinks-list').innerHTML = menuData.drinks.map(renderMenuItem).join('');
+      
+      // Генерируем карточки НАБОРОВ (только для правого монитора)
+      document.getElementById('sets-container').innerHTML = generateSetCards(menuData);
+    }
+  }
+
+  initMenuRight();
+</script>
+</body>
+</html>

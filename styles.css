@@ -1,0 +1,357 @@
+:root {
+  /* Основные цвета */
+  --bg: #F8F9FA;
+  --card: #FFFFFF;
+  --border: #344767;
+  --text: #2d3436;
+  --text-muted: #636e72;
+  --price: #d63031;
+  --shadow: 0 8px 24px rgba(52, 71, 103, 0.1);
+  
+  /* === НАСТРОЙКИ КАРТОЧЕК (КОМБО/НАБОР) === */
+  /* Цвет шрифта всех карточек */
+  --card-text-color: #1F233C;
+  /* Цвет контура карточек */
+  --card-border-color: #1F233C;
+  /* Цвет фона текста "комбо" или "набор 1\2" (боковая плашка) */
+  --card-label-bg-color: #1F233C;
+  
+  /* === НАСТРОЙКИ НАЗВАНИЙ БЛЮД === */
+  /* Цвет шрифта названий блюд, соусов, напитков, гарниров */
+  --item-name-color: #1F233C;
+  /* Размер шрифта названий блюд */
+  --item-name-font-size: 2.2vh;
+  
+  /* === НАСТРОЙКИ ЦЕНЫ === */
+  /* Цвет шрифта цены */
+  --item-price-color: #D63031;
+  /* Размер шрифта цены */
+  --item-price-font-size: 3vh;
+  
+  /* === ОТСТУПЫ МЕНЮ === */
+  /* Вертикальный отступ между элементами меню (влияет на плотность) */
+  --item-vertical-padding: 0.5vh;
+  /* Отступ между колонками меню */
+  --menu-grid-gap: 2vh;
+  /* Внутренний отступ колонок */
+  --column-padding: 2vh 2.5vh;
+  
+  /* === ГРАФИК РАБОТЫ === */
+  /* Текст графика работы в верхнем блоке */
+  --working-hours-text: "Пн–Пт: 11:00–16:00 | Сб: 11:00–15:00";
+  /* Цвет текста графика работы */
+  --working-hours-color: #ffffff;
+  /* Размер шрифта графика работы */
+  --working-hours-font-size: 2.2vh;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg);
+  font-family: 'Montserrat', sans-serif;
+  color: var(--text);
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.kiosk {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+}
+
+.monitor {
+  height: 100vh;
+  width: 100%;
+  scroll-snap-align: start;
+  display: flex;
+  flex-direction: column;
+  padding: 1.5vh 2.5vh 2vh;
+  gap: 1.2vh;
+  position: relative;
+  border-bottom: 4px solid var(--border);
+}
+
+.monitor:last-child {
+  border-bottom: none;
+}
+
+.header {
+  height: 9vh;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, #383F6C 0%, #151829 100%);
+  color: #fff;
+  padding: 0 3vh;
+  border-radius: 2vh;
+  box-shadow: 0 6px 15px rgba(52, 71, 103, 0.25);
+  flex-shrink: 0;
+  margin-bottom: 1vh;
+}
+
+.header h1 {
+  font-size: 5vh;
+  font-weight: 800;
+  letter-spacing: 0.15vh;
+}
+
+.header .meta {
+  text-align: right;
+  font-size: var(--working-hours-font-size);
+  opacity: 0.95;
+  line-height: 1.3;
+  color: var(--working-hours-color);
+}
+
+.header .time {
+  font-weight: 600;
+  color: #bdc3c7;
+  font-size: 2.8vh;
+}
+
+.promo-strip {
+  display: flex;
+  gap: 2vh;
+  flex-shrink: 0;
+}
+
+.promo-card {
+  background: var(--card);
+  border: 3px solid var(--card-border-color);
+  border-radius: 2vh;
+  box-shadow: var(--shadow);
+  display: flex;
+  overflow: hidden;
+  flex: 1;
+  position: relative;
+}
+
+.promo-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(to right, transparent, rgba(214, 48, 49, 0.18), transparent);
+  transform: skewX(-25deg);
+  animation: shimmer 3.5s infinite;
+  pointer-events: none;
+  z-index: 2;
+}
+
+@keyframes shimmer {
+  0% { left: -100%; }
+  100% { left: 200%; }
+}
+
+.promo-side {
+  width: 10vh;
+  background: var(--card-label-bg-color);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.promo-side span {
+  transform: rotate(-90deg);
+  white-space: nowrap;
+  font-size: 2.4vh;
+  font-weight: 800;
+  letter-spacing: 0.15vh;
+}
+
+.promo-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  padding: 2vh 3vh;
+  overflow: hidden;
+}
+
+.promo-desc {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5vh;
+  overflow: hidden;
+}
+
+.promo-desc span {
+  font-size: 2.4vh;
+  line-height: 1;
+  font-weight: 600;
+  color: var(--card-text-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.promo-desc strong {
+  font-weight: 800;
+  color: var(--card-text-color);
+}
+
+.promo-line {
+  width: 3px;
+  height: 80%;
+  background: var(--card-border-color);
+  margin: 0 3vh;
+  opacity: 0.15;
+  flex-shrink: 0;
+}
+
+.promo-price {
+  font-size: 7vh;
+  font-weight: 900;
+  color: var(--price);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.menu-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--menu-grid-gap);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.column {
+  background: var(--card);
+  border-radius: 2vh;
+  padding: var(--column-padding);
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05);
+  border: 2px solid rgba(52, 71, 103, 0.1);
+  min-height: 0;
+}
+
+.col-title {
+  font-size: 3vh;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1vh;
+  color: #1F233C;
+  margin-bottom: 1.5vh;
+  padding-bottom: 1vh;
+  border-bottom: 3px solid #e9ecef;
+  flex-shrink: 0;
+}
+
+.item-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.item {
+  display: flex;
+  align-items: flex-start;
+  width: 100%;
+  border-bottom: 1.5px dotted #dfe6e9;
+  line-height: 1.2;
+  padding: var(--item-vertical-padding) 0;
+}
+
+.column:not(.mains) .item {
+  padding: var(--item-vertical-padding) 0;
+}
+
+.column.mains .item {
+  padding: calc(var(--item-vertical-padding) * 1.2) 0;
+}
+
+.item:last-child {
+  border-bottom: none;
+}
+
+.item-name {
+  flex: 1;
+  font-size: var(--item-name-font-size);
+  font-weight: 800;
+  color: var(--item-name-color);
+  word-break: break-word;
+  line-height: 1.15;
+  margin-right: 0.8vh;
+}
+
+.item-meta {
+  margin-left: auto;
+  display: flex;
+  align-items: baseline;
+  gap: 0.4vh;
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding-top: 0.15vh;
+}
+
+.item-portion {
+  font-size: 2.1vh;
+  color: #95a5a6;
+  font-weight: 600;
+}
+
+.item-sep {
+  font-size: 2.1vh;
+  color: #b2bec3;
+}
+
+.item-price {
+  font-size: var(--item-price-font-size);
+  font-weight: 800;
+  color: var(--item-price-color);
+}
+
+.footer-note {
+  margin-top: auto;
+  padding-top: 1.5vh;
+  text-align: center;
+  font-size: 2.1vh;
+  color: var(--text-muted);
+  border-top: 2px solid #eee;
+  font-weight: 600;
+}
+
+@media (max-height: 950px) {
+  .promo-desc span {
+    font-size: 2.1vh;
+  }
+  .promo-price {
+    font-size: 6vh;
+  }
+  .item-name {
+    font-size: 2.5vh;
+  }
+  .item-portion {
+    font-size: 1.9vh;
+  }
+  .item-sep {
+    font-size: 1.9vh;
+  }
+  .item-price {
+    font-size: 2.7vh;
+  }
+  .col-title {
+    font-size: 2.7vh;
+  }
+  .promo-side span {
+    font-size: 2.1vh;
+  }
+}

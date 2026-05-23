@@ -1,0 +1,76 @@
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="google" content="notranslate">
+<meta http-equiv="refresh" content="300">
+<title>Menu_Left</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="kiosk">
+  <div class="monitor">
+    <header class="header">
+      <h1>СТОЛОВАЯ «ФАБЕРЖЕ»</h1>
+      <div class="meta">
+        <div>Пн–Пт: 09:00–18:00 | Сб: 10:00–16:00</div>
+        <div class="time" id="clock">17:17</div>
+      </div>
+    </header>
+
+    <div class="promo-strip" id="combo-container">
+    </div>
+
+    <div class="menu-grid">
+      <div class="column">
+        <div class="col-title">🥗 Салаты</div>
+        <div class="item-list" id="salads-list"></div>
+      </div>
+      <div class="column mains">
+        <div class="col-title">🥩 Второе блюдо</div>
+        <div class="item-list" id="mains1-list"></div>
+      </div>
+      <div class="column mains">
+        <div class="col-title">🥩 Второе блюдо</div>
+        <div class="item-list" id="mains2-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="scripts.js"></script>
+<script>
+  updateClock();
+  setInterval(updateClock, 59000);
+
+  // Установка графика работы из CSS-переменной
+  function setWorkingHours() {
+    const workingHoursElement = document.querySelector('.meta div:first-child');
+    if (workingHoursElement) {
+      const style = getComputedStyle(document.documentElement);
+      const workingHoursText = style.getPropertyValue('--working-hours-text').replace(/"/g, '').trim();
+      if (workingHoursText) {
+        workingHoursElement.textContent = workingHoursText;
+      }
+    }
+  }
+  
+  setWorkingHours();
+
+  async function initMenuLeft(){
+    const menuData = await loadMenuFromCSV('menu.csv');
+    
+    if(menuData){
+      document.getElementById('salads-list').innerHTML = menuData.salads.map(renderMenuItem).join('');
+      document.getElementById('mains1-list').innerHTML = menuData.mains1.map(renderMenuItem).join('');
+      document.getElementById('mains2-list').innerHTML = menuData.mains2.map(renderMenuItem).join('');
+      
+      // Генерируем карточки КОМБО (только для левого монитора)
+      document.getElementById('combo-container').innerHTML = generateComboCards(menuData);
+    }
+  }
+
+  initMenuLeft();
+</script>
+</body>
+</html>
