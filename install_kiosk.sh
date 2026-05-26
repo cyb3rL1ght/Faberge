@@ -162,7 +162,26 @@ which unclutter && unclutter -idle 0.1 -root &
 
 # Запускаем оконный менеджер Openbox
 openbox-session &
-sleep 2
+
+# Функция умного ожидания окна по его заголовку
+wait_for_window() {
+    local title="\$1"
+    local timeout=15
+    local count=0
+    
+    echo "⏳ Ожидание окна: \$title..."
+    
+    while ! wmctrl -l | grep -qi "\$title"; do
+        sleep 0.1
+        count=\$((count + 1))
+        if [ "\$count" -ge \$((timeout * 10)) ]; then
+            echo "❌ Ошибка: Окно '\$title' не появилось за \$timeout сек."
+            return 1
+        fi
+    done
+    echo "✅ Окно '\$title' найдено!"
+    return 0
+}
 
 # --------------------------------------------------
 # ЛЕВОЕ окно Chromium (левый монитор)
@@ -176,7 +195,10 @@ chromium \\
     --overscroll-history-navigation=0 \\
     --incognito --disable-cache --disk-cache-dir=/dev/null --disk-cache-size=1 \\
     --autoplay-policy=no-user-gesture-required &
-sleep 1
+
+if wait_for_window "Menu_Left"; then
+    wmctrl -r "Menu_Left" -e 0,0,0,${SCREEN_0_W},${SCREEN_0_H} 2>/dev/null || true
+fi
 
 # --------------------------------------------------
 # ПРАВОЕ окно Chromium (правый монитор)
@@ -190,17 +212,10 @@ chromium \\
     --overscroll-history-navigation=0 \\
     --incognito --disable-cache --disk-cache-dir=/dev/null --disk-cache-size=1 \\
     --autoplay-policy=no-user-gesture-required &
-sleep 6
 
-# --------------------------------------------------
-# Позиционируем окна через wmctrl по заголовку <title> страницы.
-# Убедитесь, что в HTML прописаны именно такие заголовки:
-#   <title>Menu_Left</title>   — для левого
-#   <title>Menu_Right</title>  — для правого
-# Формат: wmctrl -r "TITLE" -e g,x,y,w,h
-# --------------------------------------------------
-wmctrl -r "Menu_Left"  -e 0,0,0,${SCREEN_0_W},${SCREEN_0_H} 2>/dev/null || true
-wmctrl -r "Menu_Right" -e 0,${SCREEN_0_W},0,${SCREEN_1_W},${SCREEN_1_H} 2>/dev/null || true
+if wait_for_window "Menu_Right"; then
+    wmctrl -r "Menu_Right" -e 0,${SCREEN_0_W},0,${SCREEN_1_W},${SCREEN_1_H} 2>/dev/null || true
+fi
 
 wait
 EOF
@@ -249,7 +264,6 @@ wpa_pairwise=TKIP
 rsn_pairwise=CCMP
 EOF
 
-    # Указываем hostapd, где лежит конфиг
     sed -i 's|^#\?DAEMON_CONF=.*|DAEMON_CONF="/etc/hostapd/hostapd.conf"|' /etc/default/hostapd
     if ! grep -q "^DAEMON_CONF=" /etc/default/hostapd; then
         echo 'DAEMON_CONF="/etc/hostapd/hostapd.conf"' >> /etc/default/hostapd
@@ -260,11 +274,10 @@ EOF
 }
 # ============================================================================
 
-# ============================ 9. НАСТРОЙКА DNSMASQ (DHCP для клиентов) =====
+# ============================ 9. НАСТРОЙКА DNSMASQ (DHCP для клиентов) ======
 setup_dnsmasq() {
     log_info "Настраиваем dnsmasq (раздача IP клиентам Wi-Fi)..."
 
-    # Сохраняем оригинал, если он ещё не сохранён
     if [ -f /etc/dnsmasq.conf ] && [ ! -f /etc/dnsmasq.conf.orig ]; then
         mv /etc/dnsmasq.conf /etc/dnsmasq.conf.orig
     fi
@@ -280,8 +293,6 @@ EOF
 # ============================================================================
 
 # ============================ 10. СИСТЕМНЫЙ СЕРВИС HOTSPOT ==================
-# Нужен, чтобы принудительно задать статический IP на Wi-Fi интерфейсе
-# и перезапустить hostapd+dnsmasq после поднятия сети.
 setup_hotspot_service() {
     log_info "Создаём systemd-сервис hotspot.service..."
 
