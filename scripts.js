@@ -1,3 +1,8 @@
+// === НАСТРОЙКИ: ПУТЬ К ФАЙЛУ МЕНЮ ===
+// Укажите полный путь к файлу menu.csv (локальный или сетевой)
+// Пример для сетевого диска: '\\\\SERVER\\share\\menu.csv' или 'file:///Z:/menu.csv'
+const MENU_CSV_PATH = 'menu.csv';
+
 // Обновление часов
 function updateClock() {
   const d = new Date();

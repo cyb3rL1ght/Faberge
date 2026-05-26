@@ -131,6 +131,15 @@ html, body {
   flex-shrink: 0;
 }
 
+/* Скрываем promo-strip если в нем нет контента */
+.promo-strip:empty {
+  display: none;
+}
+
+.sets-container:empty {
+  display: none;
+}
+
 .promo-card {
   background: var(--card);
   border: 3px solid var(--card-border-color);
@@ -185,6 +194,7 @@ html, body {
   align-items: center;
   padding: 2vh 3vh;
   overflow: hidden;
+  gap: 2vh;
 }
 
 .promo-desc {
@@ -193,16 +203,18 @@ html, body {
   flex-direction: column;
   gap: 0.5vh;
   overflow: hidden;
+  min-width: 0;
 }
 
 .promo-desc span {
   font-size: 2.4vh;
-  line-height: 1;
+  line-height: 1.2;
   font-weight: 600;
   color: var(--card-text-color);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .promo-desc strong {
@@ -214,7 +226,6 @@ html, body {
   width: 3px;
   height: 80%;
   background: var(--card-border-color);
-  margin: 0 3vh;
   opacity: 0.15;
   flex-shrink: 0;
 }
@@ -225,11 +236,15 @@ html, body {
   color: var(--price);
   line-height: 1;
   white-space: nowrap;
+  max-width: 12vh;
+  text-align: right;
+  flex-shrink: 0;
 }
 
 /* Специфичный стиль для цены в карточках наборов */
 .sets-container .promo-price {
   font-size: var(--set-price-font-size);
+  max-width: 10vh;
 }
 
 .menu-grid {

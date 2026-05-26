@@ -59,7 +59,7 @@
   setWorkingHours();
 
   async function initMenuRight(){
-    const menuData = await loadMenuFromCSV('menu.csv');
+    const menuData = await loadMenuFromCSV(MENU_CSV_PATH);
     
     if(menuData){
       document.getElementById('soups-list').innerHTML = menuData.soups.map(renderMenuItem).join('');
@@ -67,7 +67,11 @@
       document.getElementById('drinks-list').innerHTML = menuData.drinks.map(renderMenuItem).join('');
       
       // Генерируем карточки НАБОРОВ (только для правого монитора)
-      document.getElementById('sets-container').innerHTML = generateSetCards(menuData);
+      const setsHtml = generateSetCards(menuData);
+      const setsContainer = document.getElementById('sets-container');
+      if (setsContainer) {
+        setsContainer.innerHTML = setsHtml;
+      }
     }
   }
 
