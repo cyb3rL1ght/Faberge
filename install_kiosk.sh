@@ -63,7 +63,7 @@ install_packages() {
         nginx xorg openbox unclutter wmctrl \
         curl net-tools network-manager nano \
         iputils-ping dnsutils git wireless-tools \
-        hostapd dnsmasq
+        hostapd dnsmasq samba
 
     # snap-пакеты
     if ! command -v snap >/dev/null 2>&1; then
@@ -328,7 +328,93 @@ EOF
 }
 # ============================================================================
 
-# ============================ 11. ФИНАЛЬНЫЕ ШТРИХИ ==========================
+# ============================ 11. НАСТРОЙКА SAMBA ===========================
+setup_samba() {
+    log_info "Настраиваем Samba (сетевые папки)..."
+
+    # Создаём директории для общих ресурсов
+    log_info "Создаём директории /D/TABLO и /D/DATA..."
+    mkdir -p /D/TABLO
+    mkdir -p /D/DATA
+
+    # Настраиваем права доступа
+    # TABLO: для меню сайта, доступ веб-серверу через группу www-data
+    # DATA: личная папка пользователя с полной приватностью
+    log_info "Настраиваем права доступа..."
+    chown -R "$KIOSK_USER":www-data /D/TABLO
+    chown -R "$KIOSK_USER":"$KIOSK_USER" /D/DATA
+    chmod -R 700 /D/DATA
+    chmod -R 775 /D/TABLO
+
+    # Резервная копия оригинального конфига Samba
+    if [ -f /etc/samba/smb.conf ] && [ ! -f /etc/samba/smb.conf.orig ]; then
+        cp /etc/samba/smb.conf /etc/samba/smb.conf.orig
+    fi
+
+    # Добавляем конфигурацию шариков в конец smb.conf
+    log_info "Добавляем конфигурацию сетевых папок в /etc/samba/smb.conf..."
+    
+    # Проверяем, есть ли уже наши шары в конфиге
+    if ! grep -q "\[Site-Menu\]" /etc/samba/smb.conf 2>/dev/null; then
+        cat >> /etc/samba/smb.conf <<EOF
+
+# ============================================
+# Настройка сетевых папок Kiosk-системы
+# ============================================
+
+# 1. Сетевая папка для меню (с автоматическими правами для веб-сервера)
+[Site-Menu]
+   comment = Папка для меню сайта
+   path = /D/TABLO
+   browseable = yes
+   read only = no
+   guest ok = no
+   valid users = $KIOSK_USER
+   force group = www-data
+   create mask = 0664
+   directory mask = 0775
+   force create mode = 0664
+   force directory mode = 0775
+
+# 2. Личная сетевая папка пользователя (полная приватность)
+[Personal-Files]
+   comment = Личные файлы
+   path = /D/DATA
+   browseable = yes
+   read only = no
+   guest ok = no
+   valid users = $KIOSK_USER
+   create mask = 0600
+   directory mask = 0700
+EOF
+    else
+        log_warn "Конфигурация Samba уже присутствует — пропускаем"
+    fi
+
+    # Добавляем пользователя в базу паролей Samba
+    log_info "Добавляем пользователя '$KIOSK_USER' в Samba..."
+    # Устанавливаем пароль для Samba (используем тот же, что и для Wi-Fi, или задаём отдельно)
+    # Пользователь должен будет ввести пароль при первом подключении к сетевой папке
+    echo -e "${WIFI_PASS}\n${WIFI_PASS}" | smbpasswd -a -s "$KIOSK_USER" 2>/dev/null || {
+        log_warn "Не удалось добавить пользователя в Samba автоматически."
+        log_warn "Выполните вручную: sudo smbpasswd -a $KIOSK_USER"
+    }
+
+    # Перезапускаем службу Samba
+    systemctl enable smbd
+    systemctl restart smbd
+
+    # Создаём симлинк для menu.csv
+    log_info "Создаём симлинк для menu.csv..."
+    if [ -f "$WEB_ROOT/menu.csv" ]; then
+        rm "$WEB_ROOT/menu.csv"
+    fi
+    ln -s /D/TABLO/menu.csv "$WEB_ROOT/menu.csv"
+    chown -h www-data:www-data "$WEB_ROOT/menu.csv"
+}
+# ============================================================================
+
+# ============================ 12. ФИНАЛЬНЫЕ ШТРИХИ ==========================
 finalize() {
     log_info "Отключаем systemd-networkd-wait-online (часто мешает при Wi-Fi)..."
     systemctl disable systemd-networkd-wait-online.service 2>/dev/null || true
@@ -337,9 +423,13 @@ finalize() {
     echo "  1. Положите ваши HTML-страницы в $WEB_ROOT"
     echo "     (menu-left.html с <title>Menu_Left</title>,"
     echo "      menu-right.html с <title>Menu_Right</title>)"
-    echo "  2. Перезагрузите сервер:  sudo reboot"
-    echo "  3. После ребута пользователь '$KIOSK_USER' автоматически"
+    echo "  2. Положите файл menu.csv в /D/TABLO (или создайте через сеть)"
+    echo "  3. Перезагрузите сервер:  sudo reboot"
+    echo "  4. После ребута пользователь '$KIOSK_USER' автоматически"
     echo "     залогинится в TTY1 и запустит два Chromium на два экрана."
+    echo "  5. Для доступа к сетевым папкам:"
+    echo "     - Site-Menu: \\\\$WIFI_IP\\Site-Menu (пользователь: $KIOSK_USER, пароль: $WIFI_PASS)"
+    echo "     - Personal-Files: \\\\$WIFI_IP\\Personal-Files"
 }
 # ============================================================================
 
@@ -356,6 +446,7 @@ main() {
     setup_hostapd
     setup_dnsmasq
     setup_hotspot_service
+    setup_samba
     finalize
 }
 
