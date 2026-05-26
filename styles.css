@@ -236,15 +236,14 @@ html, body {
   color: var(--price);
   line-height: 1;
   white-space: nowrap;
-  max-width: 12vh;
-  text-align: right;
+  text-align: left;
   flex-shrink: 0;
+  padding-left: 1vh;
 }
 
 /* Специфичный стиль для цены в карточках наборов */
 .sets-container .promo-price {
   font-size: var(--set-price-font-size);
-  max-width: 10vh;
 }
 
 .menu-grid {
@@ -353,6 +352,21 @@ html, body {
   color: var(--text-muted);
   border-top: 2px solid #eee;
   font-weight: 600;
+}
+
+/* Анимация пульсирующего сердца */
+@keyframes heartbeat {
+  0% { transform: scale(1); }
+  15% { transform: scale(1.3); }
+  30% { transform: scale(1); }
+  45% { transform: scale(1.3); }
+  60% { transform: scale(1); }
+  100% { transform: scale(1); }
+}
+
+.footer-note .heart {
+  display: inline-block;
+  animation: heartbeat 1.6s infinite;
 }
 
 @media (max-height: 950px) {
