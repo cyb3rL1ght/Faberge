@@ -29,11 +29,12 @@ SCREEN_1_H=1080
 # Wi-Fi точка доступа
 WIFI_IFACE="wlxf4f26d1bce7d"   # ← ОБЯЗАТЕЛЬНО ПОМЕНЯЙТЕ на своё (ip link)
 SSID="FABERGE_WIFI"
-WIFI_PASS="A_123456A"
+WIFI_PASS="ExamplePassword"
 WIFI_IP="192.168.50.1"
 WIFI_NETMASK="24"
 DHCP_START="192.168.50.10"
 DHCP_END="192.168.50.50"
+SAMBA_PASS="ExamplePassword"
 # ============================================================================
 
 # --------------------------- Вспомогательные функции ------------------------
@@ -395,7 +396,7 @@ EOF
     log_info "Добавляем пользователя '$KIOSK_USER' в Samba..."
     # Устанавливаем пароль для Samba (используем тот же, что и для Wi-Fi, или задаём отдельно)
     # Пользователь должен будет ввести пароль при первом подключении к сетевой папке
-    echo -e "${WIFI_PASS}\n${WIFI_PASS}" | smbpasswd -a -s "$KIOSK_USER" 2>/dev/null || {
+    echo -e "${SAMBA_PASS}\n${SAMBA_PASS}" | smbpasswd -a -s "$KIOSK_USER" 2>/dev/null || {
         log_warn "Не удалось добавить пользователя в Samba автоматически."
         log_warn "Выполните вручную: sudo smbpasswd -a $KIOSK_USER"
     }

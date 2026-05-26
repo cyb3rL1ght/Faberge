@@ -1,1 +1,1 @@
-Nothing needs to be added to .gitignore since only a shell script file (`install_kiosk.sh`) was modified and no build artifacts, dependencies, or temporary files were detected in the changes.
+server_kiask.txt
