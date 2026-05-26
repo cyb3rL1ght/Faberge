@@ -162,24 +162,29 @@ which unclutter && unclutter -idle 0.1 -root &
 
 # Запускаем оконный менеджер Openbox
 openbox-session &
+sleep 1
 
 # Функция умного ожидания окна по его заголовку
 wait_for_window() {
-    local title="\$1"
+    local title="$1"
     local timeout=15
     local count=0
     
-    echo "⏳ Ожидание окна: \$title..."
+    echo "⏳ Ожидание окна: $title..."
     
-    while ! wmctrl -l | grep -qi "\$title"; do
+    while ! wmctrl -l | grep -qi "$title"; do
         sleep 0.1
-        count=\$((count + 1))
-        if [ "\$count" -ge \$((timeout * 10)) ]; then
-            echo "❌ Ошибка: Окно '\$title' не появилось за \$timeout сек."
+        count=$((count + 1))
+        if [ "$count" -ge $((timeout * 10)) ]; then
+            echo "❌ Ошибка: Окно '$title' не появилось за $timeout сек."
             return 1
         fi
     done
-    echo "✅ Окно '\$title' найдено!"
+
+    # КРИТИЧЕСКИЙ МОМЕНТ: Окно появилось в системе, но даем 0.5 сек 
+    # оконному менеджеру Openbox применить к нему стили и фокус
+    sleep 1
+    echo "✅ Окно '$title' найдено!"
     return 0
 }
 
