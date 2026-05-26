@@ -18,7 +18,7 @@
       </div>
     </header>
 
-    <div class="promo-strip" id="sets-container">
+    <div class="promo-strip sets-container" id="sets-container">
     </div>
 
     <div class="menu-grid">
@@ -33,7 +33,7 @@
       <div class="column">
         <div class="col-title">☕ Напитки</div>
         <div class="item-list" id="drinks-list"></div>
-        <div class="footer-note">Приятного аппетита! 💛</div>
+        <div class="footer-note">Приятного аппетита! <span class="heart">💛</span></div>
       </div>
     </div>
   </div>
@@ -59,7 +59,7 @@
   setWorkingHours();
 
   async function initMenuRight(){
-    const menuData = await loadMenuFromCSV('menu.csv');
+    const menuData = await loadMenuFromCSV(MENU_CSV_PATH);
     
     if(menuData){
       document.getElementById('soups-list').innerHTML = menuData.soups.map(renderMenuItem).join('');
@@ -67,7 +67,11 @@
       document.getElementById('drinks-list').innerHTML = menuData.drinks.map(renderMenuItem).join('');
       
       // Генерируем карточки НАБОРОВ (только для правого монитора)
-      document.getElementById('sets-container').innerHTML = generateSetCards(menuData);
+      const setsHtml = generateSetCards(menuData);
+      const setsContainer = document.getElementById('sets-container');
+      if (setsContainer) {
+        setsContainer.innerHTML = setsHtml;
+      }
     }
   }
 

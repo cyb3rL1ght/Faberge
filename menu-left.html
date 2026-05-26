@@ -58,7 +58,7 @@
   setWorkingHours();
 
   async function initMenuLeft(){
-    const menuData = await loadMenuFromCSV('menu.csv');
+    const menuData = await loadMenuFromCSV(MENU_CSV_PATH);
     
     if(menuData){
       document.getElementById('salads-list').innerHTML = menuData.salads.map(renderMenuItem).join('');
@@ -66,7 +66,11 @@
       document.getElementById('mains2-list').innerHTML = menuData.mains2.map(renderMenuItem).join('');
       
       // Генерируем карточки КОМБО (только для левого монитора)
-      document.getElementById('combo-container').innerHTML = generateComboCards(menuData);
+      const comboHtml = generateComboCards(menuData);
+      const comboContainer = document.getElementById('combo-container');
+      if (comboContainer) {
+        comboContainer.innerHTML = comboHtml;
+      }
     }
   }
 

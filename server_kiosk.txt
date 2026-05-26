@@ -9,7 +9,7 @@ SCREEN_1_H=1080
 
 sudo apt update && sudo apt upgrade -y && apt install -y nginx xorg openbox \
  unclutter wmctrl curl net-tools network-manager nano iputils-ping dnsutils git \
- wireless-tools hostapd dnsmasq
+ wireless-tools hostapd dnsmasq samba 
 
 snap install chromium
 
@@ -189,10 +189,48 @@ systemctl disable systemd-networkd-wait-online.service
 
 
 
+# samba
+sudo mkdir -p /D/TABLO
+sudo mkdir -p /D/DATA 
+sudo chown -R max:www-data /D/TABLO
+sudo chown -R max:max /D/DATA
+sudo chmod -R 700 /D/DATA
+sudo chmod -R 775 /D/TABLO
+
+sudo nano /etc/samba/smb.conf
+# 1. Сетевая папка для меню (с автоматическими правами для веб-сервера)
+[Site-Menu]
+   comment = Папка для меню сайта
+   path = /D/TABLO
+   browseable = yes
+   read only = no
+   guest ok = no
+   valid users = max
+   force group = www-data
+   create mask = 0664
+   directory mask = 0775
+   force create mode = 0664
+   force directory mode = 0775
+
+# 2. Ваша личная сетевая папка (полная приватность)
+[Personal-Files]
+   comment = Личные файлы
+   path = /D/DATA
+   browseable = yes
+   read only = no
+   guest ok = no
+   valid users = max
+   create mask = 0600
+   directory mask = 0700
 
 
+sudo smbpasswd -a max
 
+sudo systemctl restart smbd
 
+rm /var/www/faberge/menu.csv
+ln -s /D/TABLO/menu.csv /var/www/faberge/menu.csv
+sudo chown -h www-data:www-data /var/www/faberge/menu.csv
 
 
 
