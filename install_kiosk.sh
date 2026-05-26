@@ -1,408 +1,346 @@
 #!/bin/bash
-#===============================================================================
-# Скрипт установки киоска меню для столовой «Фаберже»
-# Версия: 1.0
-# ОС: Ubuntu Server 24.04
-# Описание: Автоматическая установка и настройка системы отображения меню
-#           на двух мониторах с разным разрешением
-#===============================================================================
+# ============================================================================
+# Скрипт автоматической настройки Kiosk-системы на Ubuntu Server 24.04
+#
+# Что делает:
+#   1. Ставит нужные пакеты (nginx, Xorg, Openbox, Chromium, hostapd и т.д.)
+#   2. Настраивает nginx на раздачу страниц из /var/www/faberge
+#   3. Делает автологин пользователя в TTY1 и автозапуск графики
+#   4. Запускает ДВА окна Chromium в kiosk-режиме на двух мониторах
+#   5. Поднимает Wi-Fi точку доступа (hotspot)
+#
+# Запуск:  sudo bash setup-kiosk.sh
+# ============================================================================
 
-set -e
+set -e   # прерывать скрипт при любой ошибке
 
-#================================================================================
-# НАСТРОЙКИ (МОЖНО МЕНЯТЬ ПОД СЕБЯ)
-#================================================================================
-
-# Разрешения экранов
-SCREEN_0_W=1280   # Ширина левого экрана
-SCREEN_0_H=1024   # Высота левого экрана
-SCREEN_1_W=1920   # Ширина правого экрана
-SCREEN_1_H=1080   # Высота правого экрана
-
-# Путь к конфигурации Nginx
+# ========================== НАСТРОЙКИ (меняйте под себя) ====================
+KIOSK_USER="${SUDO_USER:-$USER}"                 # пользователь киоска
+KIOSK_HOME=$(eval echo ~"$KIOSK_USER")           # его домашняя папка
 NGINX_CONF="/etc/nginx/sites-available/faberge.conf"
-
-# URL репозитория
-REPO_URL="https://github.com/cyb3rL1ght/Faberge"
-REPO_DIR="$HOME/Faberge"
-
-# Корневая директория веб-сервера
 WEB_ROOT="/var/www/faberge"
 
-# Цвета для вывода
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+# Разрешения экранов (левый и правый мониторы)
+SCREEN_0_W=1280
+SCREEN_0_H=1024
+SCREEN_1_W=1920
+SCREEN_1_H=1080
 
-#================================================================================
-# ФУНКЦИИ
-#================================================================================
+# Wi-Fi точка доступа
+WIFI_IFACE="wlxf4f26d1bce7d"   # ← ОБЯЗАТЕЛЬНО ПОМЕНЯЙТЕ на своё (ip link)
+SSID="FABERGE_WIFI"
+WIFI_PASS="A_123456A"
+WIFI_IP="192.168.50.1"
+WIFI_NETMASK="24"
+DHCP_START="192.168.50.10"
+DHCP_END="192.168.50.50"
+# ============================================================================
 
-log_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
-}
-
-log_success() {
-    echo -e "${GREEN}[OK]${NC} $1"
-}
-
-log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
-
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
+# --------------------------- Вспомогательные функции ------------------------
+log_info()  { echo -e "\n\033[1;32m[INFO]\033[0m  $*"; }
+log_warn()  { echo -e "\033[1;33m[WARN]\033[0m  $*"; }
+log_error() { echo -e "\033[1;31m[ERR]\033[0m   $*"; }
 
 check_root() {
     if [ "$EUID" -ne 0 ]; then
-        log_error "Этот скрипт необходимо запускать от имени root (через sudo)"
-        log_error "Пример: sudo ./install_kiosk.sh"
+        log_error "Скрипт нужно запускать через sudo:  sudo bash $0"
         exit 1
     fi
-    log_success "Проверка прав root пройдена"
-}
-
-get_user_info() {
-    # Получаем имя пользователя, от которого запущен скрипт через sudo
-    KIOSK_USER="${SUDO_USER:-$USER}"
-    KIOSK_HOME=$(eval echo ~$KIOSK_USER)
-    
-    log_info "Пользователь киоска: $KIOSK_USER"
-    log_info "Домашняя директория: $KIOSK_HOME"
-}
-
-update_system() {
-    log_info "Обновление списков пакетов..."
-    apt update -qq
-    
-    log_info "Обновление установленных пакетов..."
-    apt upgrade -y -qq
-    
-    log_success "Система обновлена"
-}
-
-install_packages() {
-    log_info "Установка необходимых пакетов..."
-    
-    apt install -y -qq nginx xorg openbox \
-        unclutter wmctrl curl net-tools network-manager \
-        nano iputils-ping dnsutils git xdotool
-    
-    log_success "Пакеты установлены"
-}
-
-install_chromium() {
-    log_info "Установка Chromium..."
-    
-    # Пробуем установить через snap сначала
-    if command -v snap >/dev/null 2>&1; then
-        snap install chromium
-    else
-        # Если snap недоступен, устанавливаем через apt
-        log_warning "Snap не найден, устанавливаем Chromium через apt..."
-        apt install -y -qq chromium-browser
+    if [ -z "$SUDO_USER" ] || [ "$SUDO_USER" = "root" ]; then
+        log_error "Запустите от обычного пользователя через sudo (не от root напрямую)."
+        log_error "Иначе KIOSK_USER будет root, и автологин сломается."
+        exit 1
     fi
-    
-    log_success "Chromium установлен"
 }
+# ----------------------------------------------------------------------------
 
-configure_nginx() {
-    log_info "Настройка Nginx..."
-    
-    # Включаем и запускаем Nginx
-    systemctl enable nginx
-    systemctl restart nginx
-    
-    # Создаем директорию для веб-файлов
+# ============================ 1. ОБНОВЛЕНИЕ И ПАКЕТЫ ========================
+install_packages() {
+    log_info "Обновление системы и установка пакетов..."
+    apt update
+    apt upgrade -y
+    apt install -y \
+        nginx xorg openbox unclutter wmctrl \
+        curl net-tools network-manager nano \
+        iputils-ping dnsutils git wireless-tools \
+        hostapd dnsmasq
+
+    # snap-пакеты
+    if ! command -v snap >/dev/null 2>&1; then
+        apt install -y snapd
+    fi
+    snap install chromium || log_warn "Chromium уже установлен или snap недоступен"
+}
+# ============================================================================
+
+# ============================ 2. НАСТРОЙКА NGINX ============================
+setup_nginx() {
+    log_info "Настройка nginx (корень: $WEB_ROOT)..."
     mkdir -p "$WEB_ROOT"
-    
-    # Создаем конфигурационный файл Nginx
-    if [ ! -f "$NGINX_CONF" ]; then
-        cat > "$NGINX_CONF" << 'NGINX_EOF'
+
+    cat > "$NGINX_CONF" <<NGINX
 server {
     listen 80;
     server_name _;
 
-    # Корневая директория сайта
-    root /var/www/faberge;
+    root $WEB_ROOT;
     index index.html;
 
     location / {
-        try_files $uri $uri/ =404;
+        try_files \$uri \$uri/ =404;
     }
 }
-NGINX_EOF
-        
-        log_info "Конфигурация Nginx создана: $NGINX_CONF"
-    else
-        log_warning "Конфигурация Nginx уже существует"
-    fi
-    
-    # Создаем символическую ссылку в sites-enabled
-    ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/faberge.conf 2>/dev/null || true
-    
-    # Удаляем дефолтную конфигурацию если есть
-    rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
-    
-    # Проверяем конфигурацию и перезапускаем Nginx
-    if nginx -t; then
-        systemctl restart nginx
-        log_success "Nginx настроен и перезапущен"
-    else
-        log_error "Ошибка в конфигурации Nginx"
-        exit 1
-    fi
-}
+NGINX
 
-clone_repository() {
-    log_info "Клонирование репозитория..."
-    
-    # Клонируем репозиторий в домашнюю директорию пользователя
-    if [ ! -d "$REPO_DIR" ]; then
-        su - "$KIOSK_USER" -c "git clone $REPO_URL $REPO_DIR"
-        log_success "Репозиторий склонирован в $REPO_DIR"
-    else
-        log_warning "Репозиторий уже существует"
-        # Обновляем репозиторий
-        su - "$KIOSK_USER" -c "cd $REPO_DIR && git pull"
-        log_success "Репозиторий обновлен"
-    fi
-    
-    # Копируем файлы из репозитория в веб-директорию
-    log_info "Копирование файлов в веб-директорию..."
-    cp -r "$REPO_DIR"/* "$WEB_ROOT"/ 2>/dev/null || true
-    cp -r "$REPO_DIR"/.[!.]* "$WEB_ROOT"/ 2>/dev/null || true
-    
-    # Устанавливаем правильные права доступа
-    chown -R www-data:www-data "$WEB_ROOT"
-    chmod -R 755 "$WEB_ROOT"
-    
-    log_success "Файлы скопированы в $WEB_ROOT"
-}
+    # Включаем наш конфиг, выключаем дефолтный
+    ln -sf "$NGINX_CONF" /etc/nginx/sites-enabled/
+    rm -f /etc/nginx/sites-enabled/default
 
-configure_xwrapper() {
-    log_info "Настройка Xwrapper.config..."
-    
-    # Разрешаем запуск X любому пользователю
+    systemctl enable nginx
+    nginx -t && systemctl restart nginx
+}
+# ============================================================================
+
+# ============================ 3. РАЗРЕШАЕМ X-ОБЫЧНЫМ ЮЗЕРАМ ================
+setup_xwrapper() {
+    log_info "Настраиваем /etc/X11/Xwrapper.config (allowed_users=anybody)..."
     echo "allowed_users=anybody" > /etc/X11/Xwrapper.config
-    
-    log_success "Xwrapper.config настроен"
 }
+# ============================================================================
 
-configure_autologin() {
-    log_info "Настройка автологина для пользователя $KIOSK_USER..."
-    
-    # Создаем директорию для override файла systemd
+# ============================ 4. АВТОЛОГИН В TTY1 ===========================
+setup_autologin() {
+    log_info "Настраиваем автологин пользователя '$KIOSK_USER' на TTY1..."
     mkdir -p /etc/systemd/system/getty@tty1.service.d
-    
-    # Создаем файл автологина
-    cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf << EOF
+
+    cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf <<EOF
 [Service]
 ExecStart=
 ExecStart=-/sbin/agetty --autologin $KIOSK_USER --noclear %I \$TERM
 EOF
-    
-    # Перезагружаем systemd и включаем службу
+
     systemctl daemon-reload
     systemctl enable getty@tty1.service
-    
-    log_success "Автологин настроен"
 }
+# ============================================================================
 
-configure_profile() {
-    log_info "Настройка автозапуска startx в .profile..."
-    
-    # Проверяем, есть ли уже запись в .profile
+# ============================ 5. АВТОЗАПУСК X В .profile ====================
+setup_profile() {
+    log_info "Добавляем автозапуск startx в $KIOSK_HOME/.profile..."
+
+    # Добавляем блок только если его ещё нет
     if ! grep -q "exec startx" "$KIOSK_HOME/.profile" 2>/dev/null; then
-        cat >> "$KIOSK_HOME/.profile" << 'PROFILE_EOF'
+        cat >> "$KIOSK_HOME/.profile" <<'EOF'
 
-# Автозапуск графической сессии киоска на TTY1
+# --- Автозапуск графической сессии киоска на TTY1 ---
 if [ -z "$DISPLAY" ] && [ "$(tty)" = "/dev/tty1" ]; then
-  exec startx
+    exec startx
 fi
-PROFILE_EOF
-        
-        log_success ".profile обновлен"
+EOF
     else
-        log_warning "Запись автозапуска уже существует в .profile"
+        log_warn "Блок 'exec startx' уже есть в .profile — пропускаем"
     fi
-    
-    # Возвращаем права на .profile
-    chown "$KIOSK_USER:$KIOSK_USER" "$KIOSK_HOME/.profile"
 }
+# ============================================================================
 
-configure_xinitrc() {
-    log_info "Настройка .xinitrc..."
-    
-    XINITRC_FILE="$KIOSK_HOME/.xinitrc"
-    
-    # Создаем файл .xinitrc
-    cat > "$XINITRC_FILE" << XINITRC_EOF
+# ============================ 6. СОЗДАЁМ .xinitrc ===========================
+setup_xinitrc() {
+    log_info "Создаём $KIOSK_HOME/.xinitrc (два Chromium на два экрана)..."
+
+    # ВАЖНО: здесь НЕ используем кавычки у 'EOF', чтобы переменные
+    # SCREEN_0_W и т.д. подставились прямо в файл.
+    cat > "$KIOSK_HOME/.xinitrc" <<EOF
 #!/bin/bash
-# Базовые настройки дисплея
+# --------------------------------------------------
+# Базовые настройки дисплея: выключаем скринсейвер и DPMS
+# --------------------------------------------------
 xset s off -dpms
 xset s noblank
 
-# Прячем курсор
+# Прячем курсор мыши (если unclutter установлен)
 which unclutter && unclutter -idle 0.1 -root &
 
-# Openbox
+# Запускаем оконный менеджер Openbox
 openbox-session &
 sleep 2
 
-# === ЛЕВОЕ окно (Монитор 1) ===
+# --------------------------------------------------
+# ЛЕВОЕ окно Chromium (левый монитор)
+# --------------------------------------------------
 chromium \\
-  --kiosk \\
-  --app=http://localhost/menu-left.html \\
-  --user-data-dir=\$HOME/.config/chromium_1 \\
-  --no-first-run --noerrdialogs --disable-infobars \\
-  --disable-session-crashed-bubble --disable-translate --disable-pinch \\
-  --overscroll-history-navigation=0 \\
-  --incognito --disable-cache --disk-cache-dir=/dev/null --disk-cache-size=1 \\
-  --autoplay-policy=no-user-gesture-required &
-
+    --kiosk \\
+    --app=http://localhost/menu-left.html \\
+    --user-data-dir=\$HOME/.config/chromium_1 \\
+    --no-first-run --noerrdialogs --disable-infobars \\
+    --disable-session-crashed-bubble --disable-translate --disable-pinch \\
+    --overscroll-history-navigation=0 \\
+    --incognito --disable-cache --disk-cache-dir=/dev/null --disk-cache-size=1 \\
+    --autoplay-policy=no-user-gesture-required &
 sleep 1
 
-# === ПРАВОЕ окно (Монитор 2) ===
+# --------------------------------------------------
+# ПРАВОЕ окно Chromium (правый монитор)
+# --------------------------------------------------
 chromium \\
-  --kiosk \\
-  --app=http://localhost/menu-right.html \\
-  --user-data-dir=\$HOME/.config/chromium_2 \\
-  --no-first-run --noerrdialogs --disable-infobars \\
-  --disable-session-crashed-bubble --disable-translate --disable-pinch \\
-  --overscroll-history-navigation=0 \\
-  --incognito --disable-cache --disk-cache-dir=/dev/null --disk-cache-size=1 \\
-  --autoplay-policy=no-user-gesture-required &
-
+    --kiosk \\
+    --app=http://localhost/menu-right.html \\
+    --user-data-dir=\$HOME/.config/chromium_2 \\
+    --no-first-run --noerrdialogs --disable-infobars \\
+    --disable-session-crashed-bubble --disable-translate --disable-pinch \\
+    --overscroll-history-navigation=0 \\
+    --incognito --disable-cache --disk-cache-dir=/dev/null --disk-cache-size=1 \\
+    --autoplay-policy=no-user-gesture-required &
 sleep 6
 
-# Позиционируем окна через wmctrl
-# Левый экран: Menu_Left
-wmctrl -r "Menu_Left" -e 0,0,0,$SCREEN_0_W,$SCREEN_0_H 2>/dev/null || true
-
-# Правый экран: Menu_Right (начинается после левого экрана)
-wmctrl -r "Menu_Right" -e 0,$SCREEN_0_W,0,$SCREEN_1_W,$SCREEN_1_H 2>/dev/null || true
+# --------------------------------------------------
+# Позиционируем окна через wmctrl по заголовку <title> страницы.
+# Убедитесь, что в HTML прописаны именно такие заголовки:
+#   <title>Menu_Left</title>   — для левого
+#   <title>Menu_Right</title>  — для правого
+# Формат: wmctrl -r "TITLE" -e g,x,y,w,h
+# --------------------------------------------------
+wmctrl -r "Menu_Left"  -e 0,0,0,${SCREEN_0_W},${SCREEN_0_H} 2>/dev/null || true
+wmctrl -r "Menu_Right" -e 0,${SCREEN_0_W},0,${SCREEN_1_W},${SCREEN_1_H} 2>/dev/null || true
 
 wait
-XINITRC_EOF
-    
-    # Делаем файл исполняемым
-    chmod +x "$XINITRC_FILE"
-    
-    # Устанавливаем правильные права
-    chown "$KIOSK_USER:$KIOSK_USER" "$XINITRC_FILE"
-    
-    log_success ".xinitrc настроен"
+EOF
+
+    chmod +x "$KIOSK_HOME/.xinitrc"
+    chown "$KIOSK_USER":"$KIOSK_USER" "$KIOSK_HOME/.xinitrc"
 }
+# ============================================================================
 
+# ============================ 7. НАСТРОЙКА NETPLAN ==========================
+setup_netplan() {
+    log_info "Настраиваем Netplan: отключаем DHCP на Wi-Fi интерфейсе $WIFI_IFACE..."
 
-print_summary() {
-    echo ""
-    echo "==============================================================================="
-    echo -e "${GREEN}УСТАНОВКА ЗАВЕРШЕНА УСПЕШНО!${NC}"
-    echo "==============================================================================="
-    echo ""
-    echo "Что было сделано:"
-    echo "  ✓ Система обновлена"
-    echo "  ✓ Установлены все необходимые пакеты (nginx, xorg, openbox, chromium)"
-    echo "  ✓ Склонирован репозиторий: $REPO_URL"
-    echo "  ✓ Файлы скопированы в: $WEB_ROOT"
-    echo "  ✓ Настроен Nginx"
-    echo "  ✓ Настроен автологин для пользователя: $KIOSK_USER"
-    echo "  ✓ Настроен автозапуск графической сессии"
-    echo ""
-    echo "Настройки дисплеев:"
-    echo "  • Левый монитор: ${SCREEN_0_W}x${SCREEN_0_H}"
-    echo "  • Правый монитор: ${SCREEN_1_W}x${SCREEN_1_H}"
-    echo ""
-    echo "-------------------------------------------------------------------------------"
-    echo -e "${YELLOW}СЛЕДУЮЩИЕ ШАГИ:${NC}"
-    echo "-------------------------------------------------------------------------------"
-    echo "1. Перезагрузите систему командой: sudo reboot"
-    echo ""
-    echo "2. После перезагрузки система автоматически:"
-    echo "   - Выполнит вход под пользователем: $KIOSK_USER"
-    echo "   - Запустит графическую сессию"
-    echo "   - Откроет два окна Chromium в режиме киоска:"
-    echo "     * Левый экран: http://localhost/menu-left.html"
-    echo "     * Правый экран: http://localhost/menu-right.html"
-    echo ""
-    echo "3. Для проверки работы веб-сервера откройте в браузере:"
-    echo "   http://localhost/"
-    echo ""
-    echo "4. Файлы меню находятся в: $WEB_ROOT"
-    echo "   Для редактирования меню отредактируйте файл: $WEB_ROOT/menu.csv"
-    echo ""
-    echo "5. Для настройки расположения мониторов используйте команду:"
-    echo "   DISPLAY=:0 xrandr"
-    echo "   Пример настройки: xrandr --output HDMI-1 --mode 1280x1024 --pos 0x0 \\"
-    echo "                     --output HDMI-2 --mode 1920x1080 --pos 1280x0"
-    echo ""
-    echo "-------------------------------------------------------------------------------"
-    echo -e "${YELLOW}ПОЛЕЗНЫЕ КОМАНДЫ:${NC}"
-    echo "-------------------------------------------------------------------------------"
-    echo "• Перезапустить Nginx: sudo systemctl restart nginx"
-    echo "• Статус Nginx: sudo systemctl status nginx"
-    echo "• Просмотр логов Nginx: sudo tail -f /var/log/nginx/error.log"
-    echo "• Перезапустить графическую сессию: pkill xinit && startx"
-    echo "• Выйти из графической сессии: Ctrl+Alt+Backspace"
-    echo "• Переключиться на консоль: Ctrl+Alt+F2 (F3, F4...)"
-    echo "• Вернуться в графику: Ctrl+Alt+F1"
-    echo ""
-    echo "==============================================================================="
+    cat > /etc/netplan/50-cloud-init.yaml <<EOF
+network:
+  version: 2
+  renderer: NetworkManager
+  ethernets:
+    $WIFI_IFACE:
+      dhcp4: false
+      optional: true
+EOF
+
+    netplan apply || log_warn "netplan apply вернул ошибку (интерфейс может быть ещё не поднят)"
 }
+# ============================================================================
 
-#================================================================================
-# ОСНОВНОЙ СЦЕНАРИЙ
-#================================================================================
+# ============================ 8. НАСТРОЙКА HOSTAPD (точка доступа) ==========
+setup_hostapd() {
+    log_info "Настраиваем hostapd (Wi-Fi точка доступа $SSID)..."
 
+    cat > /etc/hostapd/hostapd.conf <<EOF
+interface=$WIFI_IFACE
+driver=nl80211
+ssid=$SSID
+hw_mode=g
+channel=7
+wmm_enabled=0
+macaddr_acl=0
+auth_algs=1
+ignore_broadcast_ssid=0
+wpa=2
+wpa_passphrase=$WIFI_PASS
+wpa_key_mgmt=WPA-PSK
+wpa_pairwise=TKIP
+rsn_pairwise=CCMP
+EOF
+
+    # Указываем hostapd, где лежит конфиг
+    sed -i 's|^#\?DAEMON_CONF=.*|DAEMON_CONF="/etc/hostapd/hostapd.conf"|' /etc/default/hostapd
+    if ! grep -q "^DAEMON_CONF=" /etc/default/hostapd; then
+        echo 'DAEMON_CONF="/etc/hostapd/hostapd.conf"' >> /etc/default/hostapd
+    fi
+
+    systemctl unmask hostapd
+    systemctl enable hostapd
+}
+# ============================================================================
+
+# ============================ 9. НАСТРОЙКА DNSMASQ (DHCP для клиентов) =====
+setup_dnsmasq() {
+    log_info "Настраиваем dnsmasq (раздача IP клиентам Wi-Fi)..."
+
+    # Сохраняем оригинал, если он ещё не сохранён
+    if [ -f /etc/dnsmasq.conf ] && [ ! -f /etc/dnsmasq.conf.orig ]; then
+        mv /etc/dnsmasq.conf /etc/dnsmasq.conf.orig
+    fi
+
+    cat > /etc/dnsmasq.conf <<EOF
+interface=$WIFI_IFACE
+dhcp-range=$DHCP_START,$DHCP_END,255.255.255.0,12h
+port=0
+EOF
+
+    systemctl enable dnsmasq
+}
+# ============================================================================
+
+# ============================ 10. СИСТЕМНЫЙ СЕРВИС HOTSPOT ==================
+# Нужен, чтобы принудительно задать статический IP на Wi-Fi интерфейсе
+# и перезапустить hostapd+dnsmasq после поднятия сети.
+setup_hotspot_service() {
+    log_info "Создаём systemd-сервис hotspot.service..."
+
+    cat > /usr/local/bin/share-wifi-ip.sh <<EOF
+#!/bin/bash
+sleep 5
+ip addr add ${WIFI_IP}/${WIFI_NETMASK} dev ${WIFI_IFACE} 2>/dev/null || true
+systemctl restart hostapd dnsmasq
+EOF
+    chmod +x /usr/local/bin/share-wifi-ip.sh
+
+    cat > /etc/systemd/system/hotspot.service <<'EOF'
+[Unit]
+Description=Force Static IP for USB Wi-Fi Hotspot
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/share-wifi-ip.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload
+    systemctl enable hotspot.service
+}
+# ============================================================================
+
+# ============================ 11. ФИНАЛЬНЫЕ ШТРИХИ ==========================
+finalize() {
+    log_info "Отключаем systemd-networkd-wait-online (часто мешает при Wi-Fi)..."
+    systemctl disable systemd-networkd-wait-online.service 2>/dev/null || true
+
+    log_info "Готово! Что дальше:"
+    echo "  1. Положите ваши HTML-страницы в $WEB_ROOT"
+    echo "     (menu-left.html с <title>Menu_Left</title>,"
+    echo "      menu-right.html с <title>Menu_Right</title>)"
+    echo "  2. Перезагрузите сервер:  sudo reboot"
+    echo "  3. После ребута пользователь '$KIOSK_USER' автоматически"
+    echo "     залогинится в TTY1 и запустит два Chromium на два экрана."
+}
+# ============================================================================
+
+# ============================ ЗАПУСК ВСЕХ ШАГОВ =============================
 main() {
-    echo ""
-    echo "==============================================================================="
-    echo "  Установка киоска меню для столовой «Фаберже»"
-    echo "  Ubuntu Server 24.04"
-    echo "==============================================================================="
-    echo ""
-    
-    # Проверка прав root
     check_root
-    
-    # Получение информации о пользователе
-    get_user_info
-    
-    # Обновление системы
-    update_system
-    
-    # Установка пакетов
     install_packages
-    
-    # Установка Chromium
-    install_chromium
-    
-    # Настройка Nginx
-    configure_nginx
-    
-    # Клонирование репозитория
-    clone_repository
-    
-    # Настройка Xwrapper
-    configure_xwrapper
-    
-    # Настройка автологина
-    configure_autologin
-    
-    # Настройка .profile
-    configure_profile
-    
-    # Настройка .xinitrc
-    configure_xinitrc
-    
-    # Вывод итоговой информации
-    print_summary
+    setup_nginx
+    setup_xwrapper
+    setup_autologin
+    setup_profile
+    setup_xinitrc
+    setup_netplan
+    setup_hostapd
+    setup_dnsmasq
+    setup_hotspot_service
+    finalize
 }
 
-# Запуск основной функции
-main
+main "$@"
